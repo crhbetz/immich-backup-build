@@ -228,16 +228,17 @@ jobs:
           set -euo pipefail
 
           VERSION="${TAG#v}"
+          APK="immich-backup-${VERSION}.apk"
+          CHECKSUM="${APK}.sha256"
+          BUILD_INFO="immich-backup-${VERSION}.build-info.txt"
 
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Immich Backup $TAG" \
             --notes "Immich Backup build based on upstream Immich ${TAG}." \
-            "immich-backup-${VERSION}.apk" \
-            "immich-backup-${VERSION}.apk.sha256" \
-            "immich-backup-${VERSION}.build-info.txt" \
-            manifest version-name \
-            "$APK"
+            "$APK" \
+            "$CHECKSUM" \
+            "$BUILD_INFO"
 
           echo
           echo "=== Signing certificate ==="
