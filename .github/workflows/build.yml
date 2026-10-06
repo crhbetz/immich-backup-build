@@ -235,7 +235,7 @@ jobs:
             --notes "Immich Backup build based on upstream Immich ${TAG}." \
             "immich-backup-${VERSION}.apk" \
             "immich-backup-${VERSION}.apk.sha256" \
-            "immich-backup-${VERSION}.build-info.txt"alyzer" \
+            "immich-backup-${VERSION}.build-info.txt" \
             manifest version-name \
             "$APK"
 
