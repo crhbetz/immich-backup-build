@@ -1,221 +1,137 @@
-name: Immich Backup
+name: Build Immich Backup
 
 on:
-  workflow_dispatch:
   schedule:
-    # Every day at 04:30 UTC
     - cron: "30 4 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
-
-concurrency:
-  group: immich-backup-release
-  cancel-in-progress: false
 
 env:
   UPSTREAM_REPO: immich-app/immich
 
 jobs:
-  check:
-    name: Check latest Immich release
+  build:
     runs-on: ubuntu-latest
 
-    outputs:
-      changed: ${{ steps.check.outputs.changed }}
-      tag: ${{ steps.upstream.outputs.tag }}
-      commit: ${{ steps.upstream.outputs.commit }}
-      version: ${{ steps.version.outputs.version }}
-
     steps:
-      - name: Checkout build repository
-        uses: actions/checkout@v7
-
-      - name: Get latest stable Immich release
+      - name: Check latest stable Immich release
         id: upstream
-        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
-          TAG="$(
-            gh api \
-              "repos/${UPSTREAM_REPO}/releases/latest" \
-              --jq '.tag_name'
-          )"
+          TAG=$(gh api \
+            "repos/${UPSTREAM_REPO}/releases/latest" \
+            --jq '.tag_name')
 
-          if [[ -z "$TAG" ]]; then
-            echo "Could not determine latest Immich release"
-            exit 1
-          fi
+          echo "Latest stable Immich release: ${TAG}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          COMMIT="$(
-            git ls-remote \
-              "https://github.com/${UPSTREAM_REPO}.git" \
-              "refs/tags/${TAG}" |
-            cut -f1
-          )"
-
-          if [[ -z "$COMMIT" ]]; then
-            echo "Could not determine commit for ${TAG}"
-            exit 1
-          fi
-
-          echo "Latest stable release: ${TAG}"
-          echo "Commit: ${COMMIT}"
-
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
-
+      - name: Check whether this version was already built
+        id: existing
         env:
           GH_TOKEN: ${{ github.token }}
-
-      - name: Read previously built release
-        id: previous
-        shell: bash
+          TAG: ${{ steps.upstream.outputs.tag }}
         run: |
-          if [[ -f .upstream-release ]]; then
-            echo "tag=$(cat .upstream-release)" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists. Nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=" >> "$GITHUB_OUTPUT"
+            echo "Release ${TAG} does not exist. Building."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Check whether rebuild is required
-        id: check
-        shell: bash
-        env:
-          CURRENT: ${{ steps.upstream.outputs.tag }}
-          PREVIOUS: ${{ steps.previous.outputs.tag }}
-        run: |
-          if [[ "$CURRENT" != "$PREVIOUS" ]]; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "New release detected: $CURRENT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Already built: $CURRENT"
-          fi
-
-      - name: Checkout Immich release
-        if: steps.check.outputs.changed == 'true'
-        uses: actions/checkout@v7
+      - name: Checkout Immich
+        if: steps.existing.outputs.exists != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: immich-app/immich
           ref: ${{ steps.upstream.outputs.tag }}
           path: immich
+          persist-credentials: false
 
-      - name: Read Immich version
-        if: steps.check.outputs.changed == 'true'
-        id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          VERSION="$(
-            sed -nE \
-              's/^version:[[:space:]]*([^+]+).*/\1/p' \
-              immich/mobile/pubspec.yaml |
-            head -n1
-          )"
-
-          if [[ -z "$VERSION" ]]; then
-            echo "Could not determine Immich version"
-            exit 1
-          fi
-
-          echo "Immich version: $VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-  build:
-    name: Build Immich Backup
-    needs: check
-    if: needs.check.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Immich release
-        uses: actions/checkout@v7
-        with:
-          repository: immich-app/immich
-          ref: ${{ needs.check.outputs.tag }}
-          path: immich
-
-      - name: Patch Android application ID and name
+      - name: Patch Android application ID and app name
+        if: steps.existing.outputs.exists != 'true'
         working-directory: immich
         shell: bash
         run: |
           set -euo pipefail
 
-          FILE="mobile/android/app/build.gradle"
+          GRADLE_FILE="mobile/android/app/build.gradle"
+          MANIFEST_FILE="mobile/android/app/src/main/AndroidManifest.xml"
 
-          grep -q \
-            'applicationId "app.alextran.immich"' \
-            "$FILE"
+          echo "Checking expected Immich source..."
 
-          grep -q \
-            'resValue "string", "app_name", "Immich"' \
-            "$FILE"
+          grep -q 'applicationId "app.alextran.immich"' "$GRADLE_FILE"
+          grep -q 'android:label="Immich"' "$MANIFEST_FILE"
 
+          echo "Patching application ID..."
           sed -i \
             's/applicationId "app\.alextran\.immich"/applicationId "app.alextran.immich.backup"/' \
-            "$FILE"
+            "$GRADLE_FILE"
 
+          echo "Patching app name..."
           sed -i \
-            's/resValue "string", "app_name", "Immich"/resValue "string", "app_name", "Immich Backup"/' \
-            "$FILE"
+            's/android:label="Immich"/android:label="Immich Backup"/' \
+            "$MANIFEST_FILE"
 
-          echo "Patched application:"
-          grep -E \
-            'applicationId|resValue "string", "app_name"' \
-            "$FILE"
+          echo "Result:"
+          grep 'applicationId' "$GRADLE_FILE"
+          grep 'android:label=' "$MANIFEST_FILE"
 
       - name: Setup Mise
-        uses: immich-app/devtools/actions/use-mise@06a9ef925332c91be647d6256642b86b398592c8
+        if: steps.existing.outputs.exists != 'true'
+        uses: immich-app/devtools/actions/use-mise@06a9ef925332c91be647d6256642b86b398592c8 # use-mise-action-v3.2.1
         with:
           github_token: ${{ github.token }}
           working_directory: ./immich/mobile
 
-      - name: Create signing keystore
-        working-directory: immich/mobile
+      - name: Create Android keystore
+        if: steps.existing.outputs.exists != 'true'
         env:
           KEY_JKS: ${{ secrets.KEY_JKS }}
-        shell: bash
+        working-directory: ./immich/mobile
         run: |
           set -euo pipefail
 
-          printf '%s' "$KEY_JKS" | base64 --decode > android/key.jks
+          printf "%s" "$KEY_JKS" | base64 --decode > android/key.jks
 
           test -s android/key.jks
 
+          echo "Keystore created:"
+          ls -lh android/key.jks
+
       - name: Setup Java
-        uses: actions/setup-java@v5
+        if: steps.existing.outputs.exists != 'true'
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: zulu
           java-version: "17"
 
-      - name: Restore Gradle cache
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-            ~/.android/sdk
-            immich/mobile/android/.gradle
-          key: immich-backup-gradle-${{ runner.os }}
-
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
+        if: steps.existing.outputs.exists != 'true'
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
         with:
           packages: ""
 
       - name: Install dependencies
-        working-directory: immich
+        if: steps.existing.outputs.exists != 'true'
+        working-directory: ./immich
         run: mise //mobile:install:ci
 
-      - name: Generate code
-        working-directory: immich
+      - name: Run code generation
+        if: steps.existing.outputs.exists != 'true'
+        working-directory: ./immich
         run: mise //mobile:codegen
 
       - name: Build APK
-        working-directory: immich/mobile
+        if: steps.existing.outputs.exists != 'true'
+        working-directory: ./immich/mobile
         env:
           ALIAS: ${{ secrets.ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -225,53 +141,98 @@ jobs:
 
           flutter build apk --release
 
-      - name: Prepare release files
-        env:
-          VERSION: ${{ needs.check.outputs.version }}
-          TAG: ${{ needs.check.outputs.tag }}
-          COMMIT: ${{ needs.check.outputs.commit }}
-        shell: bash
-        run: |
-          set -euo pipefail
+          APK="build/app/outputs/flutter-apk/app-release.apk"
 
-          mkdir -p release
+          test -s "$APK"
 
-          APK="immich/mobile/build/app/outputs/flutter-apk/app-release.apk"
-          OUT="release/immich-backup-${VERSION}.apk"
+          VERSION="${{ steps.upstream.outputs.tag }}"
+          VERSION="${VERSION#v}"
 
-          test -f "$APK"
+          cp "$APK" "immich-backup-${VERSION}.apk"
 
-          cp "$APK" "$OUT"
-
-          sha256sum "$OUT" > "${OUT}.sha256"
-
-          cat > release/build-info.txt <<EOF
-          Immich Backup
-
-          Immich release: ${TAG}
-          Immich commit:  ${COMMIT}
-          APK:            $(basename "$OUT")
-          EOF
+          sha256sum "immich-backup-${VERSION}.apk" \
+            > "immich-backup-${VERSION}.apk.sha256"
 
       - name: Verify APK
-        env:
-          VERSION: ${{ needs.check.outputs.version }}
-        shell: bash
+        if: steps.existing.outputs.exists != 'true'
+        working-directory: ./immich/mobile
         run: |
           set -euo pipefail
 
-          APK="release/immich-backup-${VERSION}.apk"
+          VERSION="${{ steps.upstream.outputs.tag }}"
+          VERSION="${VERSION#v}"
 
-          BUILD_TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          APK="immich-backup-${VERSION}.apk"
 
-          echo "=== Application ID ==="
-          "$BUILD_TOOLS/apkanalyzer" \
-            manifest application-id \
-            "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+            -name apksigner \
+            -type f \
+            | sort -V \
+            | tail -n1)
+
+          APKANALYZER="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
+
+          echo "APK: $APK"
+          echo "APK signer: $APKSIGNER"
+          echo "APK analyzer: $APKANALYZER"
 
           echo
-          echo "=== Version ==="
-          "$BUILD_TOOLS/apkanalyzer" \
+          echo "Package:"
+          "$APKANALYZER" manifest application-id "$APK"
+
+          echo
+          echo "Version:"
+          "$APKANALYZER" manifest version-name "$APK"
+          "$APKANALYZER" manifest version-code "$APK"
+
+          echo
+          echo "Signing certificate:"
+          "$APKSIGNER" verify --print-certs "$APK"
+
+          echo
+          echo "Expected package:"
+          echo "app.alextran.immich.backup"
+
+          ACTUAL_PACKAGE=$("$APKANALYZER" manifest application-id "$APK")
+
+          test "$ACTUAL_PACKAGE" = "app.alextran.immich.backup"
+
+      - name: Create build info
+        if: steps.existing.outputs.exists != 'true'
+        working-directory: ./immich/mobile
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.upstream.outputs.tag }}"
+          VERSION="${VERSION#v}"
+
+          cat > "immich-backup-${VERSION}.build-info.txt" <<EOF
+          Upstream repository: https://github.com/immich-app/immich
+          Upstream release: ${{ steps.upstream.outputs.tag }}
+          Upstream commit: $(git -C .. rev-parse HEAD)
+          Application ID: app.alextran.immich.backup
+          App name: Immich Backup
+          Build date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          EOF
+
+      - name: Create GitHub Release
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+        working-directory: ./immich/mobile
+        run: |
+          set -euo pipefail
+
+          VERSION="${TAG#v}"
+
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Immich Backup $TAG" \
+            --generate-notes \
+            "immich-backup-${VERSION}.apk" \
+            "immich-backup-${VERSION}.apk.sha256" \
+            "immich-backup-${VERSION}.build-info.txt"alyzer" \
             manifest version-name \
             "$APK"
 
