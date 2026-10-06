@@ -139,6 +139,9 @@ jobs:
         run: |
           set -euo pipefail
 
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g' >> ~/.gradle/gradle.properties
+
           flutter build apk --release
 
           APK="build/app/outputs/flutter-apk/app-release.apk"
