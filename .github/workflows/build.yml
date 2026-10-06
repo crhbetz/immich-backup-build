@@ -251,40 +251,6 @@ jobs:
           echo "=== SHA256 ==="
           sha256sum "$APK"
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.check.outputs.version }}
-          TAG: ${{ needs.check.outputs.tag }}
-          COMMIT: ${{ needs.check.outputs.commit }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          RELEASE_TAG="immich-backup-${TAG}"
-
-          gh release create "$RELEASE_TAG" \
-            "release/immich-backup-${VERSION}.apk" \
-            "release/immich-backup-${VERSION}.apk.sha256" \
-            "release/build-info.txt" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Immich Backup ${VERSION}" \
-            --notes "$(cat <<EOF
-          Immich Backup ${VERSION}
-
-          Based on official Immich release: ${TAG}
-          Upstream commit: ${COMMIT}
-
-          Android application ID:
-          app.alextran.immich.backup
-
-          This is an automatically generated, separately signed build
-          of the official Immich Android application.
-
-          It can coexist with the normal Immich application.
-          EOF
-          )"
-
       - name: Record built release
         shell: bash
         env:
