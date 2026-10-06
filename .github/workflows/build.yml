@@ -229,7 +229,7 @@ jobs:
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Immich Backup $TAG" \
-            --generate-notes \
+            --notes "Immich Backup build based on upstream Immich ${TAG}." \
             "immich-backup-${VERSION}.apk" \
             "immich-backup-${VERSION}.apk.sha256" \
             "immich-backup-${VERSION}.build-info.txt"alyzer" \
