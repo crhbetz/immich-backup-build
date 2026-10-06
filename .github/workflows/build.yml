@@ -240,17 +240,6 @@ jobs:
             "$CHECKSUM" \
             "$BUILD_INFO"
 
-          echo
-          echo "=== Signing certificate ==="
-          "$BUILD_TOOLS/apksigner" \
-            verify \
-            --print-certs \
-            "$APK"
-
-          echo
-          echo "=== SHA256 ==="
-          sha256sum "$APK"
-
       - name: Record built release
         shell: bash
         env:
