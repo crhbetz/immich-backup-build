@@ -240,22 +240,3 @@ jobs:
             "$CHECKSUM" \
             "$BUILD_INFO"
 
-      - name: Record built release
-        shell: bash
-        env:
-          TAG: ${{ needs.check.outputs.tag }}
-        run: |
-          set -euo pipefail
-
-          printf '%s\n' "$TAG" > .upstream-release
-
-          git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add .upstream-release
-
-          git commit \
-            -m "Track Immich release ${TAG}"
-
-          git push
