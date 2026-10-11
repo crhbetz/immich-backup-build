@@ -72,19 +72,18 @@ jobs:
             mobile/android/app/src/main/AndroidManifest.xml || true
             
       - name: Patch Android application ID and app name
-        if: steps.existing.outputs.exists != 'true'
         working-directory: immich
         shell: bash
         run: |
           set -euo pipefail
 
           GRADLE_FILE="mobile/android/app/build.gradle"
-          MANIFEST_FILE="mobile/android/app/src/main/AndroidManifest.xml"
+          STRINGS_FILE="mobile/android/app/src/main/res/values/strings.xml"
 
           echo "Checking expected Immich source..."
 
-          grep -q 'applicationId "app.alextran.immich"' "$GRADLE_FILE"
-          grep -q 'android:label="Immich"' "$MANIFEST_FILE"
+          grep -Fq 'applicationId "app.alextran.immich"' "$GRADLE_FILE"
+          grep -Fq '<string name="app_name">Immich</string>' "$STRINGS_FILE"
 
           echo "Patching application ID..."
           sed -i \
@@ -93,12 +92,12 @@ jobs:
 
           echo "Patching app name..."
           sed -i \
-            's/android:label="Immich"/android:label="Immich Backup"/' \
-            "$MANIFEST_FILE"
+            's|<string name="app_name">Immich</string>|<string name="app_name">Immich Backup</string>|' \
+            "$STRINGS_FILE"
 
-          echo "Result:"
-          grep 'applicationId' "$GRADLE_FILE"
-          grep 'android:label=' "$MANIFEST_FILE"
+          echo "Verifying changes..."
+          grep -F 'applicationId "app.alextran.immich.backup"' "$GRADLE_FILE"
+          grep -F '<string name="app_name">Immich Backup</string>' "$STRINGS_FILE"
 
       - name: Setup Mise
         if: steps.existing.outputs.exists != 'true'
