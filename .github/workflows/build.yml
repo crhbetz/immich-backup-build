@@ -71,6 +71,15 @@ jobs:
             mobile/android/app/src/main/res/values \
             mobile/android/app/src/main/AndroidManifest.xml || true
             
+      - name: Diagnose app name
+        working-directory: immich
+        run: |
+          echo "=== app_name in strings.xml ==="
+          grep -n -C 2 'app_name' mobile/android/app/src/main/res/values/strings.xml || true
+
+          echo "=== All app_name definitions ==="
+          grep -R -n 'name="app_name"' mobile/android || true
+            
       - name: Patch Android application ID and app name
         working-directory: immich
         shell: bash
