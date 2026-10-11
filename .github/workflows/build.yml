@@ -54,7 +54,23 @@ jobs:
           ref: ${{ steps.upstream.outputs.tag }}
           path: immich
           persist-credentials: false
+          
+      - name: Diagnose Android application ID and app name
+        working-directory: immich
+        run: |
+          set -u
 
+          echo "=== Gradle application ID ==="
+          grep -n 'applicationId' mobile/android/app/build.gradle || true
+
+          echo "=== Android manifest labels ==="
+          grep -n 'android:label' mobile/android/app/src/main/AndroidManifest.xml || true
+
+          echo "=== App name definitions ==="
+          grep -R -n 'app_name\|Immich' \
+            mobile/android/app/src/main/res/values \
+            mobile/android/app/src/main/AndroidManifest.xml || true
+            
       - name: Patch Android application ID and app name
         if: steps.existing.outputs.exists != 'true'
         working-directory: immich
