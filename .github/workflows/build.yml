@@ -57,6 +57,7 @@ jobs:
           persist-credentials: false
           
       - name: Patch Android application ID and app name
+        if: steps.existing.outputs.exists != 'true'
         working-directory: immich
         run: |
           set -euo pipefail
