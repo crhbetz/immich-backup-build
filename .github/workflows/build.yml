@@ -55,49 +55,30 @@ jobs:
           path: immich
           persist-credentials: false
           
-
-      - name: Diagnose app label source
-        working-directory: immich
-        run: |
-          echo "=== Resource references ==="
-          grep -R -n 'app_name' mobile/android --exclude-dir=build || true
-      
-          echo "=== All Android string resources ==="
-          find mobile/android -path '*/build' -prune -o -name '*.xml' -type f -print0 \
-            | xargs -0 grep -n -E '<string[^>]*>Immich|Immich</string>|app_name' || true
-      
-          echo "=== Flutter app name references ==="
-          grep -R -n -E 'Immich|app_name' mobile/android/app/src \
-            --include='*.xml' --include='*.kt' --include='*.java' || true
-
-            
       - name: Patch Android application ID and app name
         working-directory: immich
-        shell: bash
         run: |
           set -euo pipefail
-
+      
           GRADLE_FILE="mobile/android/app/build.gradle"
-          STRINGS_FILE="mobile/android/app/src/main/res/values/strings.xml"
-
+      
           echo "Checking expected Immich source..."
-
           grep -Fq 'applicationId "app.alextran.immich"' "$GRADLE_FILE"
-          grep -Fq '<string name="app_name">Immich</string>' "$STRINGS_FILE"
-
+          grep -Fq 'resValue "string", "app_name", "Immich"' "$GRADLE_FILE"
+      
           echo "Patching application ID..."
           sed -i \
             's/applicationId "app\.alextran\.immich"/applicationId "app.alextran.immich.backup"/' \
             "$GRADLE_FILE"
-
+      
           echo "Patching app name..."
           sed -i \
-            's|<string name="app_name">Immich</string>|<string name="app_name">Immich Backup</string>|' \
-            "$STRINGS_FILE"
+            's/resValue "string", "app_name", "Immich"/resValue "string", "app_name", "Immich Backup"/' \
+            "$GRADLE_FILE"
+      
+          echo "Verifying patches..."
+          grep -n -E 'applicationId|resValue "string", "app_name"' "$GRADLE_FILE"
 
-          echo "Verifying changes..."
-          grep -F 'applicationId "app.alextran.immich.backup"' "$GRADLE_FILE"
-          grep -F '<string name="app_name">Immich Backup</string>' "$STRINGS_FILE"
 
       - name: Setup Mise
         if: steps.existing.outputs.exists != 'true'
