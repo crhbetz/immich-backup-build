@@ -55,30 +55,21 @@ jobs:
           path: immich
           persist-credentials: false
           
-      - name: Diagnose Android application ID and app name
+
+      - name: Diagnose app label source
         working-directory: immich
         run: |
-          set -u
+          echo "=== Resource references ==="
+          grep -R -n 'app_name' mobile/android --exclude-dir=build || true
+      
+          echo "=== All Android string resources ==="
+          find mobile/android -path '*/build' -prune -o -name '*.xml' -type f -print0 \
+            | xargs -0 grep -n -E '<string[^>]*>Immich|Immich</string>|app_name' || true
+      
+          echo "=== Flutter app name references ==="
+          grep -R -n -E 'Immich|app_name' mobile/android/app/src \
+            --include='*.xml' --include='*.kt' --include='*.java' || true
 
-          echo "=== Gradle application ID ==="
-          grep -n 'applicationId' mobile/android/app/build.gradle || true
-
-          echo "=== Android manifest labels ==="
-          grep -n 'android:label' mobile/android/app/src/main/AndroidManifest.xml || true
-
-          echo "=== App name definitions ==="
-          grep -R -n 'app_name\|Immich' \
-            mobile/android/app/src/main/res/values \
-            mobile/android/app/src/main/AndroidManifest.xml || true
-            
-      - name: Diagnose app name
-        working-directory: immich
-        run: |
-          echo "=== app_name in strings.xml ==="
-          grep -n -C 2 'app_name' mobile/android/app/src/main/res/values/strings.xml || true
-
-          echo "=== All app_name definitions ==="
-          grep -R -n 'name="app_name"' mobile/android || true
             
       - name: Patch Android application ID and app name
         working-directory: immich
