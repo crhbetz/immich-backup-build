@@ -41,6 +41,7 @@ jobs:
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists. Nothing to do."
             echo "exists=true" >> "$GITHUB_OUTPUT"
+            exit 0
           else
             echo "Release ${TAG} does not exist. Building."
             echo "exists=false" >> "$GITHUB_OUTPUT"
